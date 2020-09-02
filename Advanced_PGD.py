@@ -14,7 +14,7 @@ class APGD():
     '''
     Notice that if set ODI_num_size = 0, then FGSM_ODI acts as same as FGSM
     '''
-    def __init__(self, model, epsilon,PGD_step_size, max_val, min_val,loss,device,max_iter=10,random_start=False):
+    def __init__(self, model, epsilon,PGD_step_size, max_val, min_val,loss,device,max_iter=10,random_start=False,standard=True,factor=100000):
         self.model = model
         # Maximum perturbation
         self.epsilon = epsilon
@@ -31,8 +31,10 @@ class APGD():
         # if random start
         self.random_start = random_start
         self.max_iter = max_iter
+        self.standard = standard
+        self.factor = factor
 
-    def perturb(self,X,y):
+    def Advanced_attack(self,X,y):
         X_adv = Variable(X.data, requires_grad=True)
         if self.random_start:
             random_noise = torch.FloatTensor(*X_adv.shape).uniform_(-self.epsilon, self.epsilon).to(self.device)
@@ -46,7 +48,36 @@ class APGD():
             print("iter :{} loss:{}".format(i,loss))
             loss.backward()
             eta = self.PGD_step_size * X_adv.grad.data.sign()
-            print(X_adv.grad.data)
+            # if i==0:
+            #     print(X_adv.grad.data)
+            #     print(torch.max(X_adv.grad))
+            #     print(torch.min(X_adv.grad))
+            X_adv = Variable(X_adv.data + eta, requires_grad=True)
+            eta = torch.clamp(X_adv.data - X.data, -self.epsilon, self.epsilon)
+            X_adv = Variable(X.data + eta, requires_grad=True)
+            X_adv = Variable(torch.clamp(X_adv, self.min_val, self.max_val), requires_grad=True)
+
+
+    def perturb(self,X,y):
+        X_adv = Variable(X.data, requires_grad=True)
+        if self.random_start:
+            random_noise = torch.FloatTensor(*X_adv.shape).uniform_(-self.epsilon, self.epsilon).to(self.device)
+            X_adv = Variable(X_adv.data + random_noise, requires_grad=True)
+
+        for i in range(self.max_iter):
+            opt = optim.SGD([X_adv], lr=1e-3)
+            opt.zero_grad()
+            with torch.enable_grad():
+                loss = self.loss(self.model(X_adv), y)
+            # print("iter :{} loss:{}".format(i,loss))
+            loss.backward()
+            eta = self.PGD_step_size * X_adv.grad.data*self.factor
+            # if i==0:
+                # print(X_adv.grad.data)
+            # print(torch.max(X_adv.grad))
+            # print(torch.min(X_adv.grad))
+            # print(torch.mean(X_adv.grad))
+
             X_adv = Variable(X_adv.data + eta, requires_grad=True)
             eta = torch.clamp(X_adv.data - X.data, -self.epsilon, self.epsilon)
             X_adv = Variable(X.data + eta, requires_grad=True)

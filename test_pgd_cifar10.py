@@ -33,6 +33,9 @@ parser.add_argument('--random_start', default=False, action='store_true')
 
 parser.add_argument("--test_model_path",type=str)
 
+# APGD
+parser.add_argument("--factor",type=float,default=100000)
+
 args = parser.parse_args()
 
 # settings
@@ -53,9 +56,9 @@ test_model = ResNet18().to(device)
 test_model.load_state_dict(torch.load(args.test_model_path))
 
 # define attacker
-adversary = APGD(model, epsilon=args.epsilon,PGD_step_size=args.step_size,
+adversary = APGD(test_model, epsilon=args.epsilon,PGD_step_size=args.step_size,
                      max_val=1.0, min_val=0.0, loss=nn.CrossEntropyLoss(), device=device,max_iter=args.num_steps,
-                     random_start=args.random_start)
+                     random_start=args.random_start,factor=args.factor)
 
 
 
@@ -72,12 +75,14 @@ def eval_test():
         pred_cln = output.max(1, keepdim=True)[1] % 10
         cln_correct += pred_cln.eq(target.view_as(pred_cln)).sum().item()
         adv_data = adversary.perturb(data,target)
+
         with torch.no_grad():
             output = test_model(adv_data)
         pred_adv = output.max(1, keepdim=True)[1]
 
         adv_correct += pred_adv.eq(target.view_as(pred_adv)).sum().item()
-
+        print(adv_correct)
+        break
     print('Clean Test: Accuracy: {}/{} ({:.0f}%)'.format(
          cln_correct, len(test_loader.dataset),
         100. * cln_correct / len(test_loader.dataset)))
